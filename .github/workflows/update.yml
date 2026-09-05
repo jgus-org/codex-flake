@@ -27,5 +27,4 @@ jobs:
       - name: Orchestrate per-version branches
         env:
           GH_TOKEN: ${{ github.token }}
-          SKIP_BUILD: "1"
         run: nix run .#update-branches

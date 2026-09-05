@@ -45,6 +45,7 @@
             inherit pkgs source;
             buildAttr = "codex";
             buildFailureHash = "cargoHash";
+            verification = "evaluate";
           };
           update-branches = flake-lib.lib.mkUpdateBranches {
             inherit pkgs source;

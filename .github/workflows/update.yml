@@ -1,30 +1,78 @@
-name: Update branches
+name: Nix cache trial
 
 on:
-  schedule:
-    - cron: '0 7 * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      expect_cache_hit:
+        description: Require all build outputs to be available from caches (second run)
+        type: boolean
+        default: false
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: update
+  group: nix-cache-trial-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  MINIMUM_TRACKING_VERSION: "0.153.4"
-
 jobs:
-  update:
+  cache-trial:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
       - uses: DeterminateSystems/nix-installer-action@main
-      - name: Orchestrate per-version branches
+      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7
+        with:
+          use-gha-cache: true
+          use-flakehub: false
+          # flake-lib disables the post-build hook in its updater commands.
+          diff-store: true
+      - name: Build pinned updater inputs
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: nix run .#update-branches
+          EXPECT_CACHE_HIT: ${{ inputs.expect_cache_hit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          targets=(
+            .#packages.x86_64-linux.codex.src
+            .#packages.x86_64-linux.codex.cargoDeps
+            .#packages.x86_64-linux.update-version
+            .#packages.x86_64-linux.update-branches
+          )
+          options=(--no-write-lock-file --option post-build-hook "")
+          if [[ "$EXPECT_CACHE_HIT" == true ]]; then
+            # A fresh runner must substitute every output; rebuilding fails the probe.
+            options+=(--max-jobs 0 --builders "")
+          fi
+          nix build "${options[@]}" --dry-run "${targets[@]}"
+          started=$SECONDS
+          nix build "${options[@]}" --no-link --print-out-paths -L "${targets[@]}" \
+            > "$RUNNER_TEMP/cache-trial-paths" \
+            2> >(tee "$RUNNER_TEMP/cache-trial-build.log" >&2)
+          elapsed=$((SECONDS - started))
+          mapfile -t outputs < "$RUNNER_TEMP/cache-trial-paths"
+          nix path-info --json --closure-size "${outputs[@]}" \
+            > "$RUNNER_TEMP/cache-trial-sizes.json"
+          git diff --exit-code -- flake.nix flake.lock pin.nix
+          {
+            echo "## Pinned Codex updater inputs"
+            echo
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Cache-only run: $EXPECT_CACHE_HIT"
+            echo "- Build/substitution time: ${elapsed}s"
+            echo
+            echo 'This probes source fetching, Cargo vendoring, and updater wrappers. It does not compile the Codex executable or measure a full branch update.'
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/cache-trial-paths"
+            echo '```'
+            echo
+            echo 'Store sizes (bytes):'
+            echo '```json'
+            cat "$RUNNER_TEMP/cache-trial-sizes.json"
+            echo
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -28,8 +28,6 @@ jobs:
         with:
           use-gha-cache: true
           use-flakehub: false
-          # flake-lib disables the post-build hook in its updater commands.
-          diff-store: true
       - name: Build pinned updater inputs
         env:
           EXPECT_CACHE_HIT: ${{ inputs.expect_cache_hit }}

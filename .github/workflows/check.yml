@@ -3,7 +3,7 @@ name: Build
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, test/nix-build-cache-5155812d]
 
 permissions:
   contents: read
@@ -14,5 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7
+        with:
+          use-gha-cache: true
+          use-flakehub: false
       - name: Build Codex with process SHELL regression tests
-        run: nix build --no-link .#checks.x86_64-linux.codex
+        env:
+          EXPECT_CACHE_HIT: ${{ github.ref == 'refs/heads/test/nix-build-cache-5155812d' && github.run_attempt > 1 }}
+        shell: bash
+        run: |
+          options=()
+          if [[ "$EXPECT_CACHE_HIT" == true ]]; then
+            options+=(--max-jobs 0 --builders "")
+          fi
+          nix build --no-link --no-write-lock-file --print-out-paths -L "${options[@]}" .#checks.x86_64-linux.codex

@@ -24,7 +24,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
-        codex = pkgs.codex.overrideAttrs (finalAttrs: _: {
+        unpatched = pkgs.codex.overrideAttrs (finalAttrs: _: {
           inherit (pin) version;
           src = pkgs.fetchFromGitHub {
             inherit (source) owner repo;
@@ -36,21 +36,51 @@
             hash = pin.cargoHash or "";
           };
         });
+        codex = unpatched.overrideAttrs (oldAttrs: {
+          patches = (oldAttrs.patches or [ ]) ++ [ ./patches/shell-environment.patch ];
+          postPatch = (oldAttrs.postPatch or "") + ''
+            cat ${./tests/shell-environment.rs} >> shell-command/src/shell_detect.rs
+          '';
+          doCheck = true;
+          # nixpkgs disables the full suite because it needs networking and host services. Run only the isolated process-shell cases here.
+          cargoTestFlags = [ "--package" "codex-shell-command" "--lib" "process_shell_tests" ];
+          checkPhase = ''
+            set -o pipefail
+            {
+              ${oldAttrs.checkPhase or "cargoCheckHook"}
+            } 2>&1 | tee shell-environment-tests.log
+            grep -Fq 'test result: ok. 5 passed; 0 failed;' shell-environment-tests.log
+          '';
+          passthru = (oldAttrs.passthru or { }) // {
+            # Advisory canaries compare the package without this workaround; a patched build cannot prove that upstream no longer needs it.
+            inherit unpatched;
+          };
+        });
+        updateVersion = flake-lib.lib.mkUpdateVersion {
+          inherit pkgs source;
+          buildAttr = "codex";
+          buildFailureHash = "cargoHash";
+          verification = "build";
+        };
       in
       {
         packages = {
           inherit codex;
           default = codex;
-          update-version = flake-lib.lib.mkUpdateVersion {
-            inherit pkgs source;
-            buildAttr = "codex";
-            buildFailureHash = "cargoHash";
-            verification = "evaluate";
+          update-version = pkgs.writeShellApplication {
+            name = "update-version";
+            runtimeInputs = [ pkgs.nix ];
+            text = ''
+              ${pkgs.lib.getExe updateVersion} "$@"
+              # flake-lib's unchanged-source shortcut only evaluates. Verify patches before update-branches can publish this version, including specification-only changes.
+              nix build --option post-build-hook "" --no-link "''${FLAKE_ROOT:-$PWD}#codex"
+            '';
           };
           update-branches = flake-lib.lib.mkUpdateBranches {
             inherit pkgs source;
             pinSchema = "github";
           };
         };
+        checks.codex = codex;
       });
 }

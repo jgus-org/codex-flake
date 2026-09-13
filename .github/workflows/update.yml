@@ -40,9 +40,12 @@ jobs:
         run: |
           plan=$(nix run .#update-branches -- list)
           base_sha=$(jq -r '.baseSha' <<<"${plan}")
-          versions=$(jq -c '.versions' <<<"${plan}")
-          newest_stable=$(jq -c '.newestStable' <<<"${plan}")
-          maintenance=$(jq -c '. as $plan | [.versions[] | select(.version != ($plan.newestStable.version // ""))]' <<<"${plan}")
+          # Codex alpha releases are not consumed here. Exclude them from both
+          # maintenance and publication so they do not consume runners or
+          # create aggregate candidates.
+          versions=$(jq -c '[.versions[] | select(.version | test("(^|[.+-])alpha"; "i") | not)]' <<<"${plan}")
+          newest_stable=$(jq -c '[.[] | select(.stable)][0] // null' <<<"${versions}")
+          maintenance=$(jq -c --argjson newest_stable "${newest_stable}" '[.[] | select(.version != ($newest_stable.version // ""))]' <<<"${versions}")
           {
             echo "base_sha=${base_sha}"
             echo "versions=${versions}"
@@ -93,6 +96,8 @@ jobs:
     if: ${{ always() && needs.discover.result == 'success' && needs.discover.outputs.maintenance != '[]' }}
     strategy:
       fail-fast: false
+      # Avoid a cache-service thundering herd as tracked stable releases grow.
+      max-parallel: 4
       matrix:
         entry: ${{ fromJson(needs.discover.outputs.maintenance) }}
     runs-on: ubuntu-latest

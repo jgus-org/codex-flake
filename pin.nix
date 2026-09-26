@@ -1,7 +1,7 @@
 # Auto-managed by `nix run .#update-version`. Manual edits will be overwritten by the next bump.
 {
-  version = "0.157.0";
-  sourceRev = "00c972ed5d6ff6499317fd41b7f23605b8e6850d";
-  sourceHash = "sha256-/f/k77vnFjPfnnf+X2E7rY2FxUR1xAcJZiPTv9Q8JVI=";
-  cargoHash = "sha256-Mp4chq9QuQB19FrOZBhmUtPrDoEpZZna79+MZs9rGUo=";
+  version = "0.155.1";
+  sourceRev = "be2951ea34f0d295ed0becf97079f92fa5f6950e";
+  sourceHash = "sha256-iFW66odceRNBsVG5bD9SdcQGxhpm/QIZwYjGCrfMXiI=";
+  cargoHash = "sha256-6IAX/SFSSgSKKFxKsUXoZ9nNQaHJ+EjZ5a4bJwyDdF0=";
 }

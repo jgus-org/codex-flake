@@ -73,7 +73,7 @@
             text = ''
               ${pkgs.lib.getExe updateVersion} "$@"
               # flake-lib's unchanged-source shortcut only evaluates. Verify patches before update-branches can publish this version, including specification-only changes.
-              nix build --option post-build-hook "" --no-link "''${FLAKE_ROOT:-$PWD}#codex"
+              nix build --no-link "''${FLAKE_ROOT:-$PWD}#codex"
             '';
           };
           update-branches = flake-lib.lib.mkUpdateBranches {

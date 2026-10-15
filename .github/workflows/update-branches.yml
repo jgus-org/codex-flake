@@ -24,6 +24,8 @@ concurrency:
 
 env:
   MINIMUM_TRACKING_VERSION: "0.153.4"
+  # The shell-environment patch only holds against stable releases; exclude prereleases from branches, maintenance, and publication.
+  TRACK_STABLE_ONLY: "true"
 
 jobs:
   workflows:

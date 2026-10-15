@@ -77,6 +77,8 @@
             '';
           };
           update-branches = flake-lib.lib.mkUpdateBranches {
+            minimumTrackingVersion = "0.153.4";
+            trackStableOnly = true;
             inherit pkgs source;
             pinSchema = "github";
           };

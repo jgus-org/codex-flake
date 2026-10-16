@@ -1,0 +1,16 @@
+diff --git a/shell-command/src/shell_detect.rs b/shell-command/src/shell_detect.rs
+--- a/shell-command/src/shell_detect.rs
++++ b/shell-command/src/shell_detect.rs
+@@ -60,6 +60,12 @@
+ 
+ #[cfg(unix)]
+ fn get_user_shell_path() -> Option<PathBuf> {
++    if let Some(shell_path) =
++        std::env::var_os("SHELL").filter(|shell_path| !shell_path.is_empty())
++    {
++        return Some(shell_path.into());
++    }
++
+     get_user_path(|passwd| passwd.pw_shell)
+         .map(|path| PathBuf::from(path.to_string_lossy().into_owned()))
+ }

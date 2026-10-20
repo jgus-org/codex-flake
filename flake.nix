@@ -72,9 +72,7 @@
         });
         updateVersion = flake-lib.lib.mkUpdateVersion {
           inherit pkgs source;
-          buildAttr = "codex";
           buildFailureHash = "cargoHash";
-          verification = "build";
         };
       in
       {

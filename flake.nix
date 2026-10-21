@@ -3,11 +3,9 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
     flake-lib = {
       url = "github:jgus-org/flake-lib/v1";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
     };
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
@@ -19,7 +17,6 @@
     {
       self,
       nixpkgs,
-      flake-utils,
       flake-lib,
       treefmt-nix,
       ...
@@ -51,7 +48,7 @@
     assert shellPatchFor "0.162.1" == ./patches/shell-environment.patch;
     assert shellPatchFor "0.163.0" == ./patches/shell-environment.get-user-path.patch;
     assert shellPatchFor "0.163.0-alpha.5" == ./patches/shell-environment.get-user-path.patch;
-    flake-utils.lib.eachDefaultSystem (
+    flake-lib.lib.eachDefaultSystem (
       system:
       let
         pkgs = import nixpkgs { inherit system; };

@@ -2,32 +2,24 @@
   description = "Codex CLI version-bumped ahead of nixpkgs.";
 
   inputs = {
+    flake-lib.url = "github:jgus-org/flake-lib/v1";
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    flake-lib = {
-      url = "github:jgus-org/flake-lib/v1";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    treefmt-nix = {
-      url = "github:numtide/treefmt-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
   outputs =
     {
       self,
-      nixpkgs,
       flake-lib,
-      treefmt-nix,
+      nixpkgs,
       ...
     }:
     let
       pin = import ./pin.nix;
       source = {
-        type = "github";
         owner = "openai";
         repo = "codex";
         tagPrefix = "rust-v";
+        type = "github";
       };
       # codex reads the login shell from the passwd DB (getpwuid_r) and ignores $SHELL, which is wrong on NixOS where
       # pw_shell is unreliable. Both patches prepend a $SHELL early-return to get_user_shell_path; upstream rewrote that
@@ -52,35 +44,29 @@
       system:
       let
         pkgs = import nixpkgs { inherit system; };
-        treefmtEval = treefmt-nix.lib.evalModule pkgs {
-          projectRootFile = "flake.nix";
-          programs.nixfmt.enable = true;
+        orgFormatting = flake-lib.lib.mkFormatting {
+          inherit self system;
         };
         unpatched = pkgs.codex.overrideAttrs (
           finalAttrs: _: {
             inherit (pin) version;
-            src = pkgs.fetchFromGitHub {
-              inherit (source) owner repo;
-              rev = pin.sourceRev;
-              hash = pin.sourceHash;
-            };
             cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
               inherit (finalAttrs)
                 pname
-                version
-                src
                 sourceRoot
+                src
+                version
                 ;
               hash = pin.cargoHash or "";
+            };
+            src = pkgs.fetchFromGitHub {
+              inherit (source) owner repo;
+              hash = pin.sourceHash;
+              rev = pin.sourceRev;
             };
           }
         );
         codex = unpatched.overrideAttrs (oldAttrs: {
-          patches = (oldAttrs.patches or [ ]) ++ [ (shellPatchFor pin.version) ];
-          postPatch = (oldAttrs.postPatch or "") + ''
-            cat ${./tests/shell-environment.rs} >> shell-command/src/shell_detect.rs
-          '';
-          doCheck = true;
           # nixpkgs disables the full suite because it needs networking and host services. Run only the isolated process-shell cases here.
           cargoTestFlags = [
             "--package"
@@ -95,10 +81,15 @@
             } 2>&1 | tee shell-environment-tests.log
             grep -Fq 'test result: ok. 5 passed; 0 failed;' shell-environment-tests.log
           '';
+          doCheck = true;
           passthru = (oldAttrs.passthru or { }) // {
             # Advisory canaries compare the package without this workaround; a patched build cannot prove that upstream no longer needs it.
             inherit unpatched;
           };
+          patches = (oldAttrs.patches or [ ]) ++ [ (shellPatchFor pin.version) ];
+          postPatch = (oldAttrs.postPatch or "") + ''
+            cat ${./tests/shell-environment.rs} >> shell-command/src/shell_detect.rs
+          '';
         });
         updateVersion = flake-lib.lib.mkUpdateVersion {
           inherit pkgs source;
@@ -106,9 +97,49 @@
         };
       in
       {
+        checks = {
+          codex = codex;
+          formatting = orgFormatting.check;
+          # Proves the version range against the two real upstream source shapes: the pinned hunk applies only to the
+          # pre-0.163.0 source, the get_user-path hunk only to the refactored one. Fails if either patch stops matching the
+          # shape its range assigns it, which is exactly the drift that broke the 0.163.0 alphas.
+          shell-environment-patch =
+            pkgs.runCommand "codex-shell-environment-patch"
+              {
+                nativeBuildInputs = [ pkgs.patch ];
+                newSrc = pkgs.fetchurl {
+                  hash = "sha256-iTOQeb6KnbxmKHo1VbnOlHDLh4VHqoWZeP5HfV6fpdk=";
+                  url = "https://raw.githubusercontent.com/openai/codex/rust-v0.163.0-alpha.1/codex-rs/shell-command/src/shell_detect.rs";
+                };
+                oldSrc = pkgs.fetchurl {
+                  hash = "sha256-e749DA+D3C4KfK3H7SLuDNndz9xyWmsYub3acpXB2Uo=";
+                  url = "https://raw.githubusercontent.com/openai/codex/rust-v0.162.1/codex-rs/shell-command/src/shell_detect.rs";
+                };
+              }
+              ''
+                set -euo pipefail
+                applies() { rm -rf w && mkdir -p w/shell-command/src && cp "$1" w/shell-command/src/shell_detect.rs && ( cd w && patch -p1 --dry-run -i "$2" >/dev/null ); }
+                applies "$oldSrc" ${./patches/shell-environment.patch}
+                if applies "$newSrc" ${./patches/shell-environment.patch}; then
+                  echo "expected the pre-refactor hunk to fail on the 0.163.0 source" >&2; exit 1
+                fi
+                applies "$newSrc" ${./patches/shell-environment.get-user-path.patch}
+                if applies "$oldSrc" ${./patches/shell-environment.get-user-path.patch}; then
+                  echo "expected the 0.163.0 hunk to be source-specific" >&2; exit 1
+                fi
+                touch $out
+              '';
+        };
+        formatter = orgFormatting.formatter;
         packages = {
           inherit codex;
           default = codex;
+          update-branches = flake-lib.lib.mkUpdateBranches {
+            inherit pkgs source;
+            minimumTrackingVersion = "0.162.0";
+            pinSchema = "github";
+            trackStableOnly = true;
+          };
           update-version = pkgs.writeShellApplication {
             name = "update-version";
             runtimeInputs = [ pkgs.nix ];
@@ -118,45 +149,7 @@
               nix build --no-link "''${FLAKE_ROOT:-$PWD}#codex"
             '';
           };
-          update-branches = flake-lib.lib.mkUpdateBranches {
-            minimumTrackingVersion = "0.162.0";
-            trackStableOnly = true;
-            inherit pkgs source;
-            pinSchema = "github";
-          };
         };
-        checks.codex = codex;
-        checks.formatting = treefmtEval.config.build.check self;
-        formatter = treefmtEval.config.build.wrapper;
-        # Proves the version range against the two real upstream source shapes: the pinned hunk applies only to the
-        # pre-0.163.0 source, the get_user-path hunk only to the refactored one. Fails if either patch stops matching the
-        # shape its range assigns it, which is exactly the drift that broke the 0.163.0 alphas.
-        checks.shell-environment-patch =
-          pkgs.runCommand "codex-shell-environment-patch"
-            {
-              nativeBuildInputs = [ pkgs.patch ];
-              oldSrc = pkgs.fetchurl {
-                url = "https://raw.githubusercontent.com/openai/codex/rust-v0.162.1/codex-rs/shell-command/src/shell_detect.rs";
-                hash = "sha256-e749DA+D3C4KfK3H7SLuDNndz9xyWmsYub3acpXB2Uo=";
-              };
-              newSrc = pkgs.fetchurl {
-                url = "https://raw.githubusercontent.com/openai/codex/rust-v0.163.0-alpha.1/codex-rs/shell-command/src/shell_detect.rs";
-                hash = "sha256-iTOQeb6KnbxmKHo1VbnOlHDLh4VHqoWZeP5HfV6fpdk=";
-              };
-            }
-            ''
-              set -euo pipefail
-              applies() { rm -rf w && mkdir -p w/shell-command/src && cp "$1" w/shell-command/src/shell_detect.rs && ( cd w && patch -p1 --dry-run -i "$2" >/dev/null ); }
-              applies "$oldSrc" ${./patches/shell-environment.patch}
-              if applies "$newSrc" ${./patches/shell-environment.patch}; then
-                echo "expected the pre-refactor hunk to fail on the 0.163.0 source" >&2; exit 1
-              fi
-              applies "$newSrc" ${./patches/shell-environment.get-user-path.patch}
-              if applies "$oldSrc" ${./patches/shell-environment.get-user-path.patch}; then
-                echo "expected the 0.163.0 hunk to be source-specific" >&2; exit 1
-              fi
-              touch $out
-            '';
       }
     );
 }

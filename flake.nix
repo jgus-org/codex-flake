@@ -15,6 +15,7 @@
     }:
     let
       pin = import ./pin.nix;
+      v8Assets = import ./v8-assets.nix;
       source = {
         owner = "openai";
         repo = "codex";
@@ -40,6 +41,9 @@
     assert shellPatchFor "0.162.1" == ./patches/shell-environment.patch;
     assert shellPatchFor "0.163.0" == ./patches/shell-environment.get-user-path.patch;
     assert shellPatchFor "0.163.0-alpha.5" == ./patches/shell-environment.get-user-path.patch;
+    # The artifact hook writes the pin's v8Version and v8-assets.nix from the same run, so a pair naming different
+    # rusty_v8 releases is a partial update: the archive and the binding would come from different releases.
+    assert v8Assets.version == pin.v8Version;
     flake-lib.lib.eachDefaultSystem (
       system:
       let
@@ -47,7 +51,22 @@
         orgFormatting = flake-lib.lib.mkFormatting {
           inherit self system;
         };
-        unpatched = pkgs.codex.overrideAttrs (
+        # nixpkgs generates its librusty_v8 pair from the Cargo.lock of its own codex release, so a pin naming that
+        # same release inherits the pair its source asks for. Any other pin carries the pair its own source asks for.
+        codexBase =
+          if pkgs.codex.version == pin.version then
+            pkgs.codex
+          else
+            pkgs.codex.override (
+              import ./v8.nix {
+                inherit (pkgs)
+                  fetchurl
+                  lib
+                  stdenv
+                  ;
+              } v8Assets
+            );
+        unpatched = codexBase.overrideAttrs (
           finalAttrs: _: {
             inherit (pin) version;
             cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
@@ -93,7 +112,9 @@
         });
         updateVersion = flake-lib.lib.mkUpdateVersion {
           inherit pkgs source;
+          artifactHook = ./artifact-hook.sh;
           buildFailureHash = "cargoHash";
+          extraHashes = [ "v8Version" ];
         };
       in
       {
@@ -136,6 +157,8 @@
           default = codex;
           update-branches = flake-lib.lib.mkUpdateBranches {
             inherit pkgs source;
+            extraBranchOwnedFiles = [ "v8-assets.nix" ];
+            extraHashes = [ "v8Version" ];
             minimumTrackingVersion = "0.162.0";
             pinSchema = "github";
             trackStableOnly = true;

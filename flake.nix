@@ -21,6 +21,16 @@
         tagPrefix = "rust-v";
         type = "github";
       };
+      # A dotted name writes a nested pin attribute; an empty field is the updater's unresolved marker, so a re-run fills it.
+      v8PinFields = [
+        "v8.version"
+        "v8.archive.aarch64-darwin"
+        "v8.archive.aarch64-linux"
+        "v8.archive.x86_64-linux"
+        "v8.srcBinding.aarch64-darwin"
+        "v8.srcBinding.aarch64-linux"
+        "v8.srcBinding.x86_64-linux"
+      ];
       # codex reads the login shell from the passwd DB (getpwuid_r) and ignores $SHELL, which is wrong on NixOS where
       # pw_shell is unreliable. Both patches prepend a $SHELL early-return to get_user_shell_path; upstream rewrote that
       # function to delegate to a get_user_path helper in the 0.163.0 line, so the hunk's anchor differs by version. nix's
@@ -47,107 +57,81 @@
         orgFormatting = flake-lib.lib.mkFormatting {
           inherit self system;
         };
-        unpatched = pkgs.codex.overrideAttrs (
-          finalAttrs: _: {
-            inherit (pin) version;
-            cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-              inherit (finalAttrs)
-                pname
-                sourceRoot
-                src
-                version
-                ;
-              hash = pin.cargoHash or "";
-            };
-            src = pkgs.fetchFromGitHub {
-              inherit (source) owner repo;
-              hash = pin.sourceHash;
-              rev = pin.sourceRev;
-            };
-          }
-        );
-        codex = unpatched.overrideAttrs (oldAttrs: {
-          # nixpkgs disables the full suite because it needs networking and host services. Run only the isolated process-shell cases here.
-          cargoTestFlags = [
-            "--package"
-            "codex-shell-command"
-            "--lib"
-            "process_shell_tests"
-          ];
-          checkPhase = ''
-            set -o pipefail
-            {
-              ${oldAttrs.checkPhase or "cargoCheckHook"}
-            } 2>&1 | tee shell-environment-tests.log
-            grep -Fq 'test result: ok. 5 passed; 0 failed;' shell-environment-tests.log
-          '';
-          doCheck = true;
-          passthru = (oldAttrs.passthru or { }) // {
-            # Advisory canaries compare the package without this workaround; a patched build cannot prove that upstream no longer needs it.
-            inherit unpatched;
-          };
-          patches = (oldAttrs.patches or [ ]) ++ [ (shellPatchFor pin.version) ];
-          postPatch = (oldAttrs.postPatch or "") + ''
-            cat ${./tests/shell-environment.rs} >> shell-command/src/shell_detect.rs
-          '';
-        });
-        updateVersion = flake-lib.lib.mkUpdateVersion {
-          inherit pkgs source;
-          buildFailureHash = "cargoHash";
-        };
       in
       {
-        checks = {
-          codex = codex;
-          formatting = orgFormatting.check;
-          # Proves the version range against the two real upstream source shapes: the pinned hunk applies only to the
-          # pre-0.163.0 source, the get_user-path hunk only to the refactored one. Fails if either patch stops matching the
-          # shape its range assigns it, which is exactly the drift that broke the 0.163.0 alphas.
-          shell-environment-patch =
-            pkgs.runCommand "codex-shell-environment-patch"
-              {
-                nativeBuildInputs = [ pkgs.patch ];
-                newSrc = pkgs.fetchurl {
-                  hash = "sha256-iTOQeb6KnbxmKHo1VbnOlHDLh4VHqoWZeP5HfV6fpdk=";
-                  url = "https://raw.githubusercontent.com/openai/codex/rust-v0.163.0-alpha.1/codex-rs/shell-command/src/shell_detect.rs";
-                };
-                oldSrc = pkgs.fetchurl {
-                  hash = "sha256-e749DA+D3C4KfK3H7SLuDNndz9xyWmsYub3acpXB2Uo=";
-                  url = "https://raw.githubusercontent.com/openai/codex/rust-v0.162.1/codex-rs/shell-command/src/shell_detect.rs";
-                };
-              }
-              ''
-                set -euo pipefail
-                applies() { rm -rf w && mkdir -p w/shell-command/src && cp "$1" w/shell-command/src/shell_detect.rs && ( cd w && patch -p1 --dry-run -i "$2" >/dev/null ); }
-                applies "$oldSrc" ${./patches/shell-environment.patch}
-                if applies "$newSrc" ${./patches/shell-environment.patch}; then
-                  echo "expected the pre-refactor hunk to fail on the 0.163.0 source" >&2; exit 1
-                fi
-                applies "$newSrc" ${./patches/shell-environment.get-user-path.patch}
-                if applies "$oldSrc" ${./patches/shell-environment.get-user-path.patch}; then
-                  echo "expected the 0.163.0 hunk to be source-specific" >&2; exit 1
-                fi
-                touch $out
-              '';
-        };
+        checks.formatting = orgFormatting.check;
         formatter = orgFormatting.formatter;
-        packages = {
-          inherit codex;
+        packages = rec {
+          # The v8 crate links a prebuilt static archive and include!s a prebuilt source binding without checking
+          # either version, so the pair comes from this pin's own instantiation, not the pair nixpkgs generated for
+          # its own codex release. The `or` fallbacks keep an unresolved pair evaluable, because update-version
+          # evaluates this package before it runs the artifact hook.
+          codex =
+            (pkgs.codex.override {
+              librusty_v8 = pkgs.fetchurl {
+                name = "librusty_v8-${pin.v8.version or ""}";
+                sha256 = pin.v8.archive.${system} or "";
+                url = "https://github.com/denoland/rusty_v8/releases/download/v${pin.v8.version or ""}/librusty_v8_release_${pkgs.stdenv.hostPlatform.rust.rustcTarget}.a.gz";
+              };
+              librusty_v8_src_binding = pkgs.fetchurl {
+                name = "src_binding-${pin.v8.version or ""}";
+                sha256 = pin.v8.srcBinding.${system} or "";
+                url = "https://github.com/denoland/rusty_v8/releases/download/v${pin.v8.version or ""}/src_binding_release_${pkgs.stdenv.hostPlatform.rust.rustcTarget}.rs";
+              };
+            }).overrideAttrs
+              (
+                finalAttrs: oldAttrs: {
+                  inherit (pin) version;
+                  cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+                    inherit (finalAttrs)
+                      pname
+                      sourceRoot
+                      src
+                      version
+                      ;
+                    hash = pin.cargoHash or "";
+                  };
+                  # nixpkgs disables the full suite because it needs networking and host services. Run only the isolated process-shell cases here.
+                  cargoTestFlags = [
+                    "--package"
+                    "codex-shell-command"
+                    "--lib"
+                    "process_shell_tests"
+                  ];
+                  checkPhase = ''
+                    set -o pipefail
+                    {
+                      ${oldAttrs.checkPhase or "cargoCheckHook"}
+                    } 2>&1 | tee shell-environment-tests.log
+                    grep -Fq 'test result: ok. 5 passed; 0 failed;' shell-environment-tests.log
+                  '';
+                  doCheck = true;
+                  patches = (oldAttrs.patches or [ ]) ++ [ (shellPatchFor pin.version) ];
+                  postPatch = (oldAttrs.postPatch or "") + ''
+                    cat ${./tests/shell-environment.rs} >> shell-command/src/shell_detect.rs
+                  '';
+                  src = pkgs.fetchFromGitHub {
+                    inherit (source) owner repo;
+                    hash = pin.sourceHash;
+                    rev = pin.sourceRev;
+                  };
+                }
+              );
           default = codex;
           update-branches = flake-lib.lib.mkUpdateBranches {
             inherit pkgs source;
+            extraHashes = v8PinFields;
+            formatter = orgFormatting.formatter;
             minimumTrackingVersion = "0.162.0";
             pinSchema = "github";
             trackStableOnly = true;
           };
-          update-version = pkgs.writeShellApplication {
-            name = "update-version";
-            runtimeInputs = [ pkgs.nix ];
-            text = ''
-              ${pkgs.lib.getExe updateVersion} "$@"
-              # flake-lib's unchanged-source shortcut only evaluates. Verify patches before update-branches can publish this version, including specification-only changes.
-              nix build --no-link "''${FLAKE_ROOT:-$PWD}#codex"
-            '';
+          update-version = flake-lib.lib.mkUpdateVersion {
+            inherit pkgs source;
+            artifactHook = ./artifact-hook.sh;
+            buildFailureHash = "cargoHash";
+            extraHashes = v8PinFields;
+            formatter = orgFormatting.formatter;
           };
         };
       }

@@ -33,3 +33,5 @@ The package is built against this flake's own nixpkgs. Following your nixpkgs in
 - **Hosts**: `aarch64-linux`, `x86_64-linux` and `aarch64-darwin`.
 - **Shell selection differs from upstream.** Upstream resolves the user's shell from the password database and ignores `SHELL`. This build reads a non-empty `SHELL` first and falls back to the password database, because `pw_shell` is unreliable on NixOS. Commands the CLI runs are therefore executed by the shell named in the environment, not the one recorded for the account.
 - **`passthru.unpatched`** is the same release built without that shell patch. It exists so this flake's maintainer can tell whether upstream still needs the change; a consumer should use `codex`.
+
+See [LICENSE.md](LICENSE.md) for licensing and copyright, and [NOTICE.md](NOTICE.md) for the terms of upstream and distributed artifacts.

@@ -115,6 +115,7 @@
           artifactHook = ./artifact-hook.sh;
           buildFailureHash = "cargoHash";
           extraHashes = [ "v8Version" ];
+          formatter = orgFormatting.formatter;
         };
       in
       {
@@ -159,6 +160,7 @@
             inherit pkgs source;
             extraBranchOwnedFiles = [ "v8-assets.nix" ];
             extraHashes = [ "v8Version" ];
+            formatter = orgFormatting.formatter;
             minimumTrackingVersion = "0.162.0";
             pinSchema = "github";
             trackStableOnly = true;

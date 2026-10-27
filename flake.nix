@@ -115,8 +115,6 @@
           artifactHook = ./artifact-hook.sh;
           buildFailureHash = "cargoHash";
           extraHashes = [ "v8Version" ];
-          # The pin is machine-written into a tree that formats itself, and the nesting a pin field name asks for is that
-          # formatter's rule rather than the writer's, so both updaters are handed this repository's own formatter.
           formatter = orgFormatting.formatter;
         };
       in

@@ -6,11 +6,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1793723244,
-        "narHash": "sha256-opUrvEe7rVoPVUs8HTyJxV5hNSYPYlgsPrzV87n8ICM=",
+        "lastModified": 1793074320,
+        "narHash": "sha256-RblR6SOFYZoGzVFU/c6+7JnqT8bs3P6Uh8xm+N7/pc8=",
         "owner": "jgus-org",
         "repo": "flake-lib",
-        "rev": "eadec1b9f460514b34203d82fec1f9e456c17218",
+        "rev": "2bade708a3f0881fb4e3de2fe2889f19220b230e",
         "type": "github"
       },
       "original": {

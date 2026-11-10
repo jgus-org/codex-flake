@@ -60,8 +60,7 @@
         orgFormatting = flake-lib.lib.mkFormatting {
           inherit self system;
         };
-        # Carry what upstream declares in https://github.com/NixOS/nixpkgs/pull/584667 until the nixpkgs
-        # this flake evaluates declares it too.
+        # https://github.com/NixOS/nixpkgs/pull/584667
         codexSysLibs = with pkgs; [
           aws-lc
           oniguruma

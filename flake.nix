@@ -60,7 +60,7 @@
         orgFormatting = flake-lib.lib.mkFormatting {
           inherit self system;
         };
-        # https://github.com/NixOS/nixpkgs/pull/584667
+        # Begin (https://github.com/NixOS/nixpkgs/pull/584667)
         codexSysLibs = with pkgs; [
           aws-lc
           oniguruma
@@ -73,9 +73,10 @@
         ) codexSysLibs;
         codexSysLibsToCarry =
           if nixpkgsCodexCarriesSysLibs then
-            throw "nixpkgs' own codex declares aws-lc, oniguruma, sqlite and zstd, so this flake's codexSysLibs carry is redundant"
+            throw "Remove this code block (https://github.com/NixOS/nixpkgs/pull/584667)"
           else
             codexSysLibs;
+        # End (https://github.com/NixOS/nixpkgs/pull/584667)
       in
       {
         checks.formatting = orgFormatting.check;

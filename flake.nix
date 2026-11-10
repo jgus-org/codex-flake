@@ -60,6 +60,23 @@
         orgFormatting = flake-lib.lib.mkFormatting {
           inherit self system;
         };
+        # Carry what upstream declares in https://github.com/NixOS/nixpkgs/pull/584667 until the nixpkgs
+        # this flake evaluates declares it too.
+        codexSysLibs = with pkgs; [
+          aws-lc
+          oniguruma
+          sqlite
+          zstd
+        ];
+        # By derivation: these are multi-output packages, and buildInputs names the dev output.
+        nixpkgsCodexCarriesSysLibs = builtins.all (
+          sysLib: builtins.any (carried: carried.drvPath == sysLib.drvPath) (pkgs.codex.buildInputs or [ ])
+        ) codexSysLibs;
+        codexSysLibsToCarry =
+          if nixpkgsCodexCarriesSysLibs then
+            throw "nixpkgs' own codex declares aws-lc, oniguruma, sqlite and zstd, so this flake's codexSysLibs carry is redundant"
+          else
+            codexSysLibs;
       in
       {
         checks.formatting = orgFormatting.check;
@@ -85,6 +102,7 @@
               (
                 finalAttrs: oldAttrs: {
                   inherit (pin) version;
+                  buildInputs = (oldAttrs.buildInputs or [ ]) ++ codexSysLibsToCarry;
                   cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
                     inherit (finalAttrs)
                       pname

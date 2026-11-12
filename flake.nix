@@ -125,7 +125,7 @@
             inherit pkgs source;
             extraHashes = v8PinFields;
             formatter = orgFormatting.formatter;
-            minimumTrackingVersion = "0.162.0";
+            minimumTrackingVersion = "0.166.0";
             pinSchema = "github";
             trackStableOnly = true;
           };

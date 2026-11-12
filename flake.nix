@@ -60,23 +60,6 @@
         orgFormatting = flake-lib.lib.mkFormatting {
           inherit self system;
         };
-        # Begin (https://github.com/NixOS/nixpkgs/pull/584667)
-        codexSysLibs = with pkgs; [
-          aws-lc
-          oniguruma
-          sqlite
-          zstd
-        ];
-        # By derivation: these are multi-output packages, and buildInputs names the dev output.
-        nixpkgsCodexCarriesSysLibs = builtins.all (
-          sysLib: builtins.any (carried: carried.drvPath == sysLib.drvPath) (pkgs.codex.buildInputs or [ ])
-        ) codexSysLibs;
-        codexSysLibsToCarry =
-          if nixpkgsCodexCarriesSysLibs then
-            throw "Remove this code block (https://github.com/NixOS/nixpkgs/pull/584667)"
-          else
-            codexSysLibs;
-        # End (https://github.com/NixOS/nixpkgs/pull/584667)
       in
       {
         checks.formatting = orgFormatting.check;
@@ -102,7 +85,6 @@
               (
                 finalAttrs: oldAttrs: {
                   inherit (pin) version;
-                  buildInputs = (oldAttrs.buildInputs or [ ]) ++ codexSysLibsToCarry;
                   cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
                     inherit (finalAttrs)
                       pname

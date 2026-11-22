@@ -13,7 +13,7 @@ The other outputs (`checks.*`, `formatter`, `update-version`, `update-branches`)
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     codex = {
       url = "github:jgus-org/codex-flake";
       inputs.nixpkgs.follows = "nixpkgs";

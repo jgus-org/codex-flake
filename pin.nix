@@ -1,8 +1,8 @@
 # Auto-managed by `nix run .#update-version`. Manual edits will be overwritten by the next bump.
 {
-  cargoHash = "sha256-baArx7G/DmmT+1k4ykHoBnVU73ta0F+Hai4hWBkHV/Q=";
-  sourceHash = "sha256-MDLBCNRb/1DNPZWegnF2yFDQU4IdSsgQcYOh0JV3EN8=";
-  sourceRev = "3d86e43b075adeba2193ec5c22ac92f55afd82e6";
+  cargoHash = "sha256-+YSkZwmAP88AOFmNWav4ye4ObbDYAIo0mzeQEzTqDm8=";
+  sourceHash = "sha256-p8Vw0Vu8ufPY35k/RkcKE6HOTMJta2J9W33ei/7in+A=";
+  sourceRev = "d32063f96c2dff1dc96af839b3952abb6acfeda4";
   v8 = {
     archive = {
       aarch64-darwin = "sha256-pKVIREStS18Q3HvtFBI23Z2+q/IAbRRSDxm5NdTbQic=";
@@ -16,5 +16,5 @@
     };
     version = "152.2.0";
   };
-  version = "0.172.0";
+  version = "0.169.0";
 }
